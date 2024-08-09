@@ -28,6 +28,8 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 import webdriver_manager.chrome as ChromeDriverManager
 ChromeDriverManager = ChromeDriverManager.ChromeDriverManager
 
+import openai
+import PyPDF2
 
 log = logging.getLogger(__name__)
 
@@ -65,7 +67,8 @@ class EasyApplyBot:
                  filename='output.csv',
                  blacklist=[],
                  blackListTitles=[],
-                 experience_level=[]
+                 experience_level=[],
+                 openai_api_key=None
                  ) -> None:
 
         log.info("Welcome to Easy Apply Bot")
@@ -102,7 +105,8 @@ class EasyApplyBot:
         self.start_linkedin(username, password)
         self.phone_number = phone_number
         self.experience_level = experience_level
-
+        self.openai_api_key = openai_api_key
+        openai.api_key = self.openai_api_key
 
         self.locator = {
             "next": (By.CSS_SELECTOR, "button[aria-label='Continue to next step']"),
@@ -264,10 +268,6 @@ class EasyApplyBot:
                 # get job links, (the following are actually the job card objects)
                 if self.is_present(self.locator["links"]):
                     links = self.get_elements("links")
-                # links = self.browser.find_elements("xpath",
-                #     '//div[@data-job-id]'
-                # )
-
                     jobIDs = {} #{Job id: processed_status}
                 
                     # children selector is the container of the job cards on the left
@@ -282,10 +282,9 @@ class EasyApplyBot:
                                         jobIDs[jobID] = "To be processed"
                     if len(jobIDs) > 0:
                         self.apply_loop(jobIDs)
-                    self.browser, jobs_per_page = self.next_jobs_page(position,
-                                                                      location,
-                                                                      jobs_per_page, 
-                                                                      experience_level=self.experience_level)
+                    else:
+                        log.info("No new jobs found, switching location...")
+                        self.switch_location(position)
                 else:
                     self.browser, jobs_per_page = self.next_jobs_page(position,
                                                                       location,
@@ -295,6 +294,15 @@ class EasyApplyBot:
 
             except Exception as e:
                 print(e)
+
+    def switch_location(self, position):
+        for location in self.locations:
+            log.info(f"Switching to location: {location}")
+            self.browser, _ = self.next_jobs_page(position, location, 0, experience_level=self.experience_level)
+            if self.is_present(self.locator["links"]):
+                log.info(f"Found jobs in location: {location}")
+                break
+
     def apply_loop(self, jobIDs):
         for jobID in jobIDs:
             if jobIDs[jobID] == "To be processed":
@@ -605,12 +613,9 @@ class EasyApplyBot:
             answer = "Yes"
         else:
             log.info("Not able to answer question automatically. Please provide answer")
-            #open file and document unanswerable questions, appending to it
-            answer = "user provided"
+            answer = self.get_answer_from_gpt(question)
             time.sleep(15)
 
-            # df = pd.DataFrame(self.answers, index=[0])
-            # df.to_csv(self.qa_file, encoding="utf-8")
         log.info("Answering question: " + question + " with answer: " + answer)
 
         # Append question and answer to the CSV
@@ -622,6 +627,30 @@ class EasyApplyBot:
             log.info(f"Appended to QA file: '{question}' with answer: '{answer}'.")
 
         return answer
+
+    def get_answer_from_gpt(self, question):
+        try:
+            # Read the resume content from the local PDF file
+            with open(self.uploads['Resume'], 'rb') as file:
+                reader = PyPDF2.PdfReader(file)
+                resume_content = ""
+                for page in range(len(reader.pages)):
+                    resume_content += reader.pages[page].extract_text()
+
+            response = openai.ChatCompletion.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are applying for job and need to be precise."},
+                    {"role": "user", "content": f"Based on the following resume and my Address is 3112 Mantle Dr, Tracy, California, United States, 95377, also I donot have any other name other than Tirth Shah, provide a concise answer to the job application question.\n\nResume:\n{resume_content}\n\nQuestion: {question}\n\nAnswer concisely:"}
+                ],
+                max_tokens=150
+            )
+            answer = response.choices[0].message['content'].strip()
+            log.info(f"Received answer from GPT: {answer}")
+            return answer
+        except Exception as e:
+            log.error(f"Error getting answer from GPT: {e}")
+            return "user provided"
 
     def load_page(self, sleep=1):
         scroll_page = 0
@@ -658,7 +687,7 @@ class EasyApplyBot:
         self.browser.get(
             # URL for jobs page
             "https://www.linkedin.com/jobs/search/?f_LF=f_AL&keywords=" +
-            position + location + "&start=" + str(jobs_per_page) + experience_level_param )
+            position + location + "&start=" + str(jobs_per_page) + experience_level_param + date_posted_param)
         
         log.info("Loading next job page?")
         self.load_page()
@@ -711,7 +740,8 @@ if __name__ == '__main__':
                        filename=output_filename,
                        blacklist=blacklist,
                        blackListTitles=blackListTitles,
-                       experience_level=parameters.get('experience_level', [])
+                       experience_level=parameters.get('experience_level', []),
+                       openai_api_key=parameters.get('openai_api_key', None)
                        )
     bot.start_apply(positions, locations)
 
