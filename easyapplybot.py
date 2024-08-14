@@ -641,7 +641,7 @@ class EasyApplyBot:
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are applying for job and need to be precise."},
-                    {"role": "user", "content": f"Based on the following resume and my Address is 3112 Mantle Dr, Tracy, California, United States, 95377, also I donot have any other name other than Tirth Shah, provide a concise answer to the job application question.\n\nResume:\n{resume_content}\n\nQuestion: {question}\n\nAnswer concisely:"}
+                    {"role": "user", "content": f"Based on the following resume and my Address is 3112 Mantle Dr, Tracy, California, United States, 95377, also I donot have any other name other than Tirth Shah, provide a concise answer to the job application question.\n\nResume:\n{resume_content}\n\nQuestion: {question}\n\nAnswer concisely, no sentences, on point answers only:"}
                 ],
                 max_tokens=150
             )
