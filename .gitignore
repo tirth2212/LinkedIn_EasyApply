@@ -148,3 +148,18 @@ venv8/
 quickstart.py
 states.json
 logs
+
+# Configuration files with sensitive data
+config.yaml
+config.yml
+*.yaml
+*.yml
+
+# API keys and credentials
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+credentials.json
+secrets.json
