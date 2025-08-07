@@ -183,8 +183,33 @@ class EasyApplyBot:
         try:
             user_field = self.browser.find_element("id","username")
             pw_field = self.browser.find_element("id","password")
-            login_button = self.browser.find_element("xpath",
-                        '//*[@id="organic-div"]/form/div[3]/button')
+            
+            # Try multiple selectors for the login button
+            login_button = None
+            button_selectors = [
+                '//*[@id="organic-div"]/form/div[3]/button',
+                '//button[@type="submit"]',
+                '//button[contains(text(), "Sign in")]',
+                '//input[@type="submit"]',
+                '//*[@data-id="sign-in-form__submit-btn"]',
+                '.btn__primary--large'
+            ]
+            
+            for selector in button_selectors:
+                try:
+                    if selector.startswith('//') or selector.startswith('//*'):
+                        login_button = self.browser.find_element("xpath", selector)
+                    else:
+                        login_button = self.browser.find_element("css selector", selector)
+                    log.info(f"Found login button using selector: {selector}")
+                    break
+                except:
+                    continue
+            
+            if login_button is None:
+                log.error("Could not find login button with any selector")
+                raise Exception("Login button not found")
+            
             user_field.send_keys(username)
             user_field.send_keys(Keys.TAB)
             time.sleep(2)
